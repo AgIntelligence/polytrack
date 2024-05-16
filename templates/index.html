@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-Time GPS Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
+    <style>
+        #map { height: 90vh; }
+        #controls { height: 10vh; display: flex; justify-content: center; align-items: center; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="controls">
+        <button id="toggleTrackingBtn">Start Tracking</button>
+    </div>
+    <script>
+        var map = L.map('map').setView([46.3345, -113.3021], 20);  // Default view, adjust as necessary
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+        }).addTo(map);
+
+        var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+
+        var polygonLayer = null;
+        var currentLocationMarker = null;
+        var tracking = false;
+
+        socket.on('tracking_status', function(data) {
+            tracking = data.tracking;
+            document.getElementById('toggleTrackingBtn').innerText = tracking ? 'Stop Tracking' : 'Start Tracking';
+        });
+
+        socket.on('update_positions', function(data) {
+            // Update polygon
+            var combinedPositions = data.combined.map(function(coord) {
+                return [coord[0], coord[1]];
+            });
+
+            if (polygonLayer) {
+                polygonLayer.setLatLngs(combinedPositions);
+            } else {
+                polygonLayer = L.polygon(combinedPositions, {color: 'blue', fillColor: 'blue', fillOpacity: 0.5}).addTo(map);
+            }
+        });
+
+        socket.on('update_current_location', function(data) {
+            // Update current location marker
+            var currentLocation = data.current_location;
+            if (currentLocationMarker) {
+                currentLocationMarker.setLatLng([currentLocation[0], currentLocation[1]]);
+            } else {
+                currentLocationMarker = L.marker([currentLocation[0], currentLocation[1]], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',  // URL for red dot icon
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    })
+                }).addTo(map);
+            }
+        });
+
+        document.getElementById('toggleTrackingBtn').addEventListener('click', function() {
+            socket.emit('toggle_tracking');
+        });
+    </script>
+</body>
+</html>
